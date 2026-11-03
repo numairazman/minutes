@@ -65,13 +65,37 @@ enum Typeface {
     }
 }
 
+// MARK: - Spacing
+
+/// One vertical rhythm on a 4 pt grid, named for what each gap separates. Every screen uses
+/// these and nothing else, so equal things sit at equal distances everywhere.
+enum Space {
+    /// A label and the value right under it ("Speech model" / "Ready").
+    static let tight: CGFloat = 4
+    /// Lines that belong to one item (a title and its excerpt, a name and its words).
+    static let line: CGFloat = 8
+    /// Items in a group (bullets in a list, chips in the legend).
+    static let item: CGFloat = 12
+    /// The padding inside a ruled row, above and below its content.
+    static let row: CGFloat = 16
+    /// Between groups on one page (header to notes, heading to its rows).
+    static let group: CGFloat = 24
+    /// Before a new part of the page (Decided after the overview, tabs after the header).
+    static let part: CGFloat = 32
+    /// Between sections of Settings, and day groups in the list.
+    static let section: CGFloat = 40
+}
+
 // MARK: - Page layout
 
 /// The page's columns. The margin scales with Dynamic Type so "10:47 PM" never wraps.
 struct PageMetrics {
     var marginWidth: CGFloat
-    static let edge: CGFloat = 18
-    static let gutter: CGFloat = 14
+    static let edge: CGFloat = 20
+    /// More room on the right than the left: text running to within 18 pt of the edge read as
+    /// cramped, and the margin column already anchors the left.
+    static let trailingEdge: CGFloat = 24
+    static let gutter: CGFloat = 16
 
     /// x of the red margin rule, from the leading edge of the screen.
     var ruleX: CGFloat { Self.edge + marginWidth + Self.gutter / 2 }
@@ -110,7 +134,8 @@ struct MarginRow<Margin: View, Page: View>: View {
             page
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, PageMetrics.edge)
+        .padding(.leading, PageMetrics.edge)
+        .padding(.trailing, PageMetrics.trailingEdge)
     }
 }
 

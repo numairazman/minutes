@@ -24,12 +24,18 @@ enum RecorderError: LocalizedError {
 @MainActor
 @Observable
 final class RecordingController {
+    /// One recorder for the app. Shared so the Live Activity's Pause/Resume buttons, which run
+    /// as intents outside any view, reach the same one.
+    static let shared = RecordingController()
+
     enum Phase: Equatable {
         case idle, starting, recording, paused, stopping
     }
 
     private(set) var phase: Phase = .idle
     private(set) var meetingID: UUID?
+    /// When this recording began, for the screen's "Began" note however often it's reopened.
+    private(set) var startedAt: Date?
     private(set) var elapsed: TimeInterval = 0
     /// The last 12 s of input level at 20 samples a second — enough history for the pen trace to
     /// read as a drawn line rather than a jagged few points.
@@ -87,6 +93,9 @@ final class RecordingController {
         }
 
         phase = .recording
+        let began = Date()
+        startedAt = began
+        RecordingActivityController.shared.start(meetingID: meeting.id, startedAt: began)
         UIApplication.shared.isIdleTimerDisabled = Preferences.keepScreenOn
         observeSession()
         startMeter()
@@ -100,6 +109,7 @@ final class RecordingController {
         guard phase == .recording else { return }
         engine.pause()
         phase = .paused
+        pushActivity(force: true)
     }
 
     func resume() {
@@ -109,6 +119,7 @@ final class RecordingController {
             try engine.start()
             phase = .recording
             notice = nil
+            pushActivity(force: true)
         } catch {
             notice = "Couldn't resume: \(error.localizedDescription)"
         }
@@ -133,6 +144,7 @@ final class RecordingController {
         reset()
 
         guard duration >= 1 else {
+            RecordingActivityController.shared.discard()
             store.delete(meetingID)
             return nil
         }
@@ -140,6 +152,7 @@ final class RecordingController {
             $0.duration = duration
             $0.status = .processing
         }
+        RecordingActivityController.shared.processing(nil, for: meetingID, force: true)
         processing.enqueue(meetingID, .full(liveWords: words))
         return meetingID
     }
@@ -152,6 +165,7 @@ final class RecordingController {
         await live?.cancel()
         sink?.close()
         reset()
+        RecordingActivityController.shared.discard()
         store.delete(meetingID)
     }
 
@@ -194,6 +208,7 @@ final class RecordingController {
         live = nil
         liveStart = nil
         meetingID = nil
+        startedAt = nil
         phase = .idle
         notice = nil
     }
@@ -211,6 +226,7 @@ final class RecordingController {
                     if self.phase == .recording {
                         self.phase = .paused
                         self.notice = "Paused because another app took the microphone."
+                        self.pushActivity(force: true)
                     }
                 case .ended:
                     if options?.contains(.shouldResume) == true { self.resume() }
@@ -230,6 +246,7 @@ final class RecordingController {
                 } catch {
                     self.phase = .paused
                     self.notice = "The microphone changed. Tap Resume to keep recording."
+                    self.pushActivity(force: true)
                 }
             }
         })
@@ -243,8 +260,18 @@ final class RecordingController {
                 self.levels.removeFirst()
                 self.levels.append(self.phase == .recording ? sink.takeLevel() : 0)
                 self.levelTick += 1
+                self.pushActivity()
             }
         }
+    }
+
+    /// The lock screen's copy of what this screen shows. Throttled inside the controller.
+    private func pushActivity(force: Bool = false) {
+        RecordingActivityController.shared.recording(
+            elapsed: elapsed, paused: phase == .paused, levels: levels, tick: levelTick,
+            line: [finalizedText, volatileText].filter { !$0.isEmpty }.joined(separator: " "),
+            force: force
+        )
     }
 
     private func startLiveTranscription() {

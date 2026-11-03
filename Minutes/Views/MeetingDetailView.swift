@@ -13,7 +13,7 @@ struct MeetingDetailView: View {
     @AppStorage(Preferences.exportTimestampsKey) private var exportTimestamps = true
     @AppStorage(Preferences.serverAddressKey) private var serverAddress = ""
 
-    @ScaledMetric(relativeTo: .footnote) private var marginWidth: CGFloat = 62
+    @ScaledMetric(relativeTo: .footnote) private var marginWidth: CGFloat = 58
 
     @State private var tab: Tab = .summary
     @State private var player = PlaybackController()
@@ -36,7 +36,7 @@ struct MeetingDetailView: View {
                         .foregroundStyle(Color.pencil)
                 }
                 .frame(maxHeight: .infinity, alignment: .top)
-                .padding(.top, 40)
+                .padding(.top, Space.section)
             }
         }
         .background(PaperPage(metrics: metrics))
@@ -52,25 +52,25 @@ struct MeetingDetailView: View {
                     MarginRow(metrics: metrics) {
                         InkTabs(tabs: [(.summary, "Summary"), (.transcript, "Transcript")], selection: $tab)
                     }
-                    .padding(.top, 26)
-                    RuledLine().padding(.top, 2)
+                    .padding(.top, Space.part)
+                    RuledLine().padding(.top, Space.tight)
                     Group {
                         switch tab {
                         case .summary: summary(meeting)
                         case .transcript: transcript(meeting)
                         }
                     }
-                    .padding(.top, 20)
+                    .padding(.top, Space.group)
                 } else if meeting.status == .ready {
                     MarginRow(metrics: metrics) {
                         Text("No speech was picked up in this recording.")
                             .font(Typeface.page(.body).italic())
                             .foregroundStyle(Color.pencil)
                     }
-                    .padding(.top, 28)
+                    .padding(.top, Space.part)
                 }
             }
-            .padding(.bottom, 32)
+            .padding(.bottom, Space.section)
         }
         .scrollIndicators(.hidden)
         .toolbar(.hidden, for: .navigationBar)
@@ -88,7 +88,7 @@ struct MeetingDetailView: View {
 
     private func header(_ meeting: Meeting) -> some View {
         MarginRow(metrics: metrics) {
-            VStack(alignment: .trailing, spacing: 2) {
+            VStack(alignment: .trailing, spacing: Space.tight) {
                 Text(meeting.createdAt.formatted(.dateTime.weekday(.abbreviated)))
                     .font(Typeface.note(.caption))
                     .foregroundStyle(Color.pencil)
@@ -100,7 +100,7 @@ struct MeetingDetailView: View {
                     .foregroundStyle(Color.pencil)
             }
         } page: {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Space.item) {
                 Text(meeting.title)
                     .font(Typeface.page(.title, .bold))
                     .foregroundStyle(Color.ink)
@@ -112,12 +112,12 @@ struct MeetingDetailView: View {
                     .font(Typeface.note(.subheadline))
                     .foregroundStyle(Color.pencil)
                 if !meeting.speakers.isEmpty {
-                    FlowLayout(spacing: 14, lineSpacing: 8) {
+                    FlowLayout(spacing: Space.row, lineSpacing: Space.line) {
                         ForEach(meeting.speakers, id: \.self) { key in
                             Button {
                                 beginRename(key, in: meeting)
                             } label: {
-                                HStack(spacing: 7) {
+                                HStack(spacing: Space.line) {
                                     InkStroke(color: Ink.color(for: key))
                                     Text(meeting.displayName(forSpeaker: key))
                                         .font(Typeface.page(.subheadline, .semibold))
@@ -128,7 +128,7 @@ struct MeetingDetailView: View {
                             .accessibilityHint("Rename this speaker")
                         }
                     }
-                    .padding(.top, 2)
+                    .padding(.top, Space.tight)
                     if meeting.speakerNames.isEmpty {
                         Text("Tap a name to say who it is.")
                             .font(Typeface.note(.caption))
@@ -137,7 +137,7 @@ struct MeetingDetailView: View {
                 }
             }
         }
-        .padding(.top, 8)
+        .padding(.top, Space.item)
     }
 
     // MARK: - Notes (processing, problems)
@@ -147,7 +147,7 @@ struct MeetingDetailView: View {
         let stage = processing.stage(for: meeting.id)
         if let stage {
             MarginRow(metrics: metrics) {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Space.line) {
                     StatusNote(meeting: meeting, stage: stage)
                     Text(stage.isRemote
                         ? "Your PC is doing the work. Keep Minutes open until it's done."
@@ -156,7 +156,7 @@ struct MeetingDetailView: View {
                         .foregroundStyle(Color.pencil)
                 }
             }
-            .padding(.top, 22)
+            .padding(.top, Space.group)
         } else if meeting.status == .processing {
             problem("Waiting its turn behind another meeting.", icon: "hourglass", color: .pencil)
         } else if meeting.status == .interrupted || meeting.status == .failed {
@@ -165,7 +165,7 @@ struct MeetingDetailView: View {
                     .font(Typeface.note(.subheadline))
                     .foregroundStyle(Color.margin)
             } page: {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: Space.item) {
                     Text(meeting.status == .failed
                         ? (meeting.processingError ?? "Couldn't transcribe this recording.")
                         : "The app closed during this recording. The audio up to that point is safe.")
@@ -175,7 +175,7 @@ struct MeetingDetailView: View {
                         .buttonStyle(InkCapsuleStyle())
                 }
             }
-            .padding(.top, 22)
+            .padding(.top, Space.group)
         }
         if stage == nil {
             if let speakerError = meeting.speakerError {
@@ -197,7 +197,7 @@ struct MeetingDetailView: View {
                 .font(Typeface.note(.footnote))
                 .foregroundStyle(Color.pencil)
         }
-        .padding(.top, 14)
+        .padding(.top, Space.item)
     }
 
     // MARK: - Summary
@@ -216,16 +216,35 @@ struct MeetingDetailView: View {
                 list("Decided", summary.decisions, marker: "checkmark", color: Ink.color(for: "2"))
                 list("To do", summary.actionItems, marker: "circle", color: .ballpoint)
                 list("Discussed", summary.keyPoints, marker: nil, color: .pencil)
+                if let caveat = summary.caveat {
+                    MarginRow(metrics: metrics) {
+                        Image(systemName: "exclamationmark.circle")
+                            .font(Typeface.note(.footnote))
+                            .foregroundStyle(Color.margin)
+                    } page: {
+                        Text(caveat)
+                            .font(Typeface.note(.footnote))
+                            .foregroundStyle(Color.ink)
+                    }
+                    .padding(.top, Space.group)
+                }
                 MarginRow(metrics: metrics) {
-                    Text("Written on this iPhone by Apple Intelligence. Check names and numbers against the transcript.")
+                    Image(systemName: meeting.transcriptEngine == nil ? "iphone" : "desktopcomputer")
+                        .font(Typeface.note(.caption))
+                        .foregroundStyle(Color.pencil)
+                } page: {
+                    // Exactly what made what: all on this iPhone, or the PC for the transcript
+                    // and speakers with Apple Intelligence for the summary.
+                    Text("\(meeting.provenance) Check names and numbers against the transcript.")
                         .font(Typeface.page(.caption).italic())
                         .foregroundStyle(Color.pencil)
+                        .lineSpacing(2)
                 }
-                .padding(.top, 28)
+                .padding(.top, Space.part)
             }
         } else if let error = meeting.summaryError {
             MarginRow(metrics: metrics) {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: Space.item) {
                     Text(error)
                         .font(Typeface.page(.body))
                         .foregroundStyle(Color.pencil)
@@ -247,7 +266,7 @@ struct MeetingDetailView: View {
     @ViewBuilder
     private func list(_ title: String, _ items: [String], marker: String?, color: Color) -> some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Space.item) {
                 MarginRow(metrics: metrics) {
                     Text(title)
                         .font(Typeface.page(.title3, .semibold))
@@ -269,12 +288,12 @@ struct MeetingDetailView: View {
                         Text(item)
                             .font(Typeface.page(.body))
                             .foregroundStyle(Color.ink)
-                            .lineSpacing(3)
+                            .lineSpacing(4)
                             .textSelection(.enabled)
                     }
                 }
             }
-            .padding(.top, 26)
+            .padding(.top, Space.part)
         }
     }
 
@@ -285,18 +304,16 @@ struct MeetingDetailView: View {
         let utterances = meeting.utterances
         let long = meeting.duration >= 3600
         return LazyVStack(alignment: .leading, spacing: 0) {
-            if let engine = meeting.transcriptEngine {
-                MarginRow(metrics: metrics) {
-                    Image(systemName: "desktopcomputer")
-                        .font(Typeface.note(.caption))
-                        .foregroundStyle(Color.pencil)
-                } page: {
-                    Text("Re-processed on your PC: \(engine)")
-                        .font(Typeface.note(.caption))
-                        .foregroundStyle(Color.pencil)
-                }
-                .padding(.bottom, 14)
+            MarginRow(metrics: metrics) {
+                Image(systemName: meeting.transcriptEngine == nil ? "iphone" : "desktopcomputer")
+                    .font(Typeface.note(.caption))
+                    .foregroundStyle(Color.pencil)
+            } page: {
+                Text("Transcript and speakers from \(meeting.transcriptSource).")
+                    .font(Typeface.note(.caption))
+                    .foregroundStyle(Color.pencil)
             }
+            .padding(.bottom, Space.row)
             ForEach(utterances.indices, id: \.self) { index in
                 let utterance = utterances[index]
                 // A paragraph break after a pause isn't a new speaker; don't repeat the name.
@@ -314,7 +331,7 @@ struct MeetingDetailView: View {
                     .disabled(player.duration == 0)
                     .accessibilityLabel("Play from \(clockText(utterance.start, long: long))")
                 } page: {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Space.tight) {
                         if !continues {
                             Button {
                                 beginRename(utterance.speaker, in: meeting)
@@ -332,8 +349,8 @@ struct MeetingDetailView: View {
                             .lineSpacing(4)
                             .textSelection(.enabled)
                     }
-                    .padding(.vertical, 6)
-                    .padding(.trailing, 4)
+                    .padding(.vertical, Space.tight)
+                    .padding(.trailing, Space.tight)
                     .background(alignment: .leading) {
                         // The margin rule takes the speaker's ink for as long as they talk.
                         Capsule()
@@ -348,7 +365,7 @@ struct MeetingDetailView: View {
                     }
                     .animation(.easeOut(duration: 0.25), value: playing)
                 }
-                .padding(.top, continues ? 4 : 16)
+                .padding(.top, continues ? Space.line : Space.group)
             }
         }
     }
@@ -356,7 +373,7 @@ struct MeetingDetailView: View {
     // MARK: - Player
 
     private var playerDock: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Space.item) {
             Button {
                 player.toggle()
             } label: {
@@ -374,14 +391,14 @@ struct MeetingDetailView: View {
                 .foregroundStyle(Color.pencil)
                 .fixedSize()
         }
-        .padding(.leading, 8)
-        .padding(.trailing, 16)
-        .padding(.vertical, 8)
+        .padding(.leading, Space.line)
+        .padding(.trailing, Space.row)
+        .padding(.vertical, Space.line)
         .background(Capsule().fill(Color.paperRaised))
         .overlay(Capsule().strokeBorder(Color.rule, lineWidth: 1))
-        .padding(.horizontal, 14)
-        .padding(.top, 18)
-        .padding(.bottom, 6)
+        .padding(.horizontal, PageMetrics.edge)
+        .padding(.top, Space.group)
+        .padding(.bottom, Space.line)
         .background {
             // The page fades out under the player rather than showing through around it.
             LinearGradient(colors: [Color.paper.opacity(0), Color.paper, Color.paper], startPoint: .top, endPoint: .bottom)
@@ -587,12 +604,12 @@ struct SpeakerCountRow: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Color.ink)
             } page: {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Space.item) {
                     Text("Number of speakers")
                         .font(Typeface.page(.body))
                         .foregroundStyle(Color.ink)
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: Space.line) {
                             choice(0, "Auto")
                             ForEach(1...8, id: \.self) { choice($0, "\($0)") }
                         }
@@ -600,7 +617,7 @@ struct SpeakerCountRow: View {
                     .scrollClipDisabled()
                 }
             }
-            .padding(.vertical, 14)
+            .padding(.vertical, Space.row)
             RuledLine()
         }
         .opacity(enabled ? 1 : 0.4)

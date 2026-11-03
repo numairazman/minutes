@@ -1,6 +1,7 @@
 import Foundation
 import MinutesCore
 import Observation
+import WidgetKit
 
 /// Meetings live as plain files: Documents/Meetings/<id>/meeting.json plus the audio. Plain
 /// files rather than a database so they also show up in the Files app, and a corrupt meeting
@@ -18,6 +19,7 @@ final class MeetingStore {
         root = documents.appendingPathComponent("Meetings", isDirectory: true)
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         load()
+        updateWidgets()
     }
 
     func meeting(_ id: UUID) -> Meeting? {
@@ -44,7 +46,23 @@ final class MeetingStore {
         }
         meetings.sort { $0.createdAt > $1.createdAt }
         write(meeting)
+        updateWidgets()
     }
+
+    /// The lock-screen widget shows the newest finished meeting. Written only when that changes,
+    /// since `save` runs on every rename and stage. (Without the App Group entitlement the
+    /// shared container is missing and this does nothing.)
+    private func updateWidgets() {
+        let newest = meetings.first { $0.status == .ready }.map {
+            WidgetSnapshot.LastMeeting(id: $0.id, title: $0.title, createdAt: $0.createdAt, duration: $0.duration, people: $0.speakers.count)
+        }
+        guard newest?.id != lastWidgetMeeting?.id || newest?.title != lastWidgetMeeting?.title else { return }
+        lastWidgetMeeting = newest
+        WidgetSnapshot(lastMeeting: newest).write()
+        WidgetCenter.shared.reloadTimelines(ofKind: "last-meeting")
+    }
+
+    @ObservationIgnored private var lastWidgetMeeting: WidgetSnapshot.LastMeeting?
 
     func update(_ id: UUID, _ change: (inout Meeting) -> Void) {
         guard var meeting = meeting(id) else { return }
@@ -55,6 +73,7 @@ final class MeetingStore {
     func delete(_ id: UUID) {
         meetings.removeAll { $0.id == id }
         try? FileManager.default.removeItem(at: folder(for: id))
+        updateWidgets()
     }
 
     /// A new meeting for the recorder, saved immediately as `.recording` so that if the app is

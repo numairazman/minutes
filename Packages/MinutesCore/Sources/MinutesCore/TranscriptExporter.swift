@@ -20,6 +20,11 @@ public enum TranscriptExporter {
         out.append(meta.joined(separator: " · "))
         let speakers = meeting.speakers.map { meeting.displayName(forSpeaker: $0) }
         if !speakers.isEmpty { out.append("Speakers: " + speakers.joined(separator: ", ")) }
+        // Say what made each part, so a reader of the file knows what produced the words.
+        out.append("Transcript and speakers: " + meeting.transcriptSource)
+        if options.includeSummary, let source = meeting.summarySource {
+            out.append("Summary: " + source)
+        }
 
         if options.includeSummary, let summary = meeting.summary {
             out.append("")
@@ -29,6 +34,10 @@ public enum TranscriptExporter {
             section("Key points", summary.keyPoints, into: &out)
             section("Decisions", summary.decisions, into: &out)
             section("Action items", summary.actionItems, into: &out)
+            if let caveat = summary.caveat {
+                out.append("")
+                out.append("(\(caveat))")
+            }
         }
 
         out.append("")

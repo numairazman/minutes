@@ -6,7 +6,8 @@ import SwiftUI
 struct MinutesApp: App {
     @State private var store = MeetingStore()
     @State private var processing = ProcessingQueue()
-    @State private var recorder = RecordingController()
+    @State private var recorder = RecordingController.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -15,9 +16,30 @@ struct MinutesApp: App {
                 .environment(processing)
                 .environment(recorder)
                 .task {
+                    await RecordingActivityController.shared.endLeftovers()
                     processing.attach(store)
                     processing.resumeUnfinished()
+                    #if DEBUG
+                    // Diagnostics from a Mac: `devicectl device process launch --console … -resummarizeLatest`
+                    // re-runs the summary of the newest meeting so its log can be read on the Mac.
+                    if ProcessInfo.processInfo.arguments.contains("-resummarizeLatest"),
+                       let latest = store.meetings.first(where: { !$0.utterances.isEmpty }) {
+                        print("[Debug] re-summarizing the newest meeting (\(latest.utterances.count) paragraphs)")
+                        processing.enqueue(latest.id, .summary)
+                    }
+                    #endif
                     ModelWarmup.start()
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    // Processing needs the app on screen (Apple Intelligence won't run in the
+                    // background); the lock-screen card says so rather than freezing.
+                    let activityMeeting = RecordingActivityController.shared.meetingID
+                    guard let id = activityMeeting, processing.isBusy(id) else { return }
+                    if phase == .background {
+                        RecordingActivityController.shared.waitingForApp()
+                    } else if phase == .active {
+                        RecordingActivityController.shared.processing(processing.stage(for: id), for: id, force: true)
+                    }
                 }
         }
     }

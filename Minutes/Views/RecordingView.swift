@@ -9,8 +9,7 @@ struct RecordingView: View {
     @Environment(ProcessingQueue.self) private var processing
     @Environment(RecordingController.self) private var recorder
 
-    @ScaledMetric(relativeTo: .footnote) private var marginWidth: CGFloat = 62
-    @State private var startedAt = Date()
+    @ScaledMetric(relativeTo: .footnote) private var marginWidth: CGFloat = 58
     /// This screen is its own full-screen cover, above the app's card host, so it has its own.
     @State private var pad = Pad()
 
@@ -23,7 +22,7 @@ struct RecordingView: View {
             clock
             PenTrace(levels: recorder.levels, tick: recorder.levelTick, active: isRecording)
                 .frame(height: 96)
-                .padding(.top, 14)
+                .padding(.top, Space.row)
             RuledLine()
             if let notice = recorder.notice {
                 MarginRow(metrics: metrics) {
@@ -35,7 +34,7 @@ struct RecordingView: View {
                         .font(Typeface.note(.footnote))
                         .foregroundStyle(Color.pencil)
                 }
-                .padding(.vertical, 10)
+                .padding(.vertical, Space.item)
                 RuledLine()
             }
             liveText
@@ -89,7 +88,7 @@ struct RecordingView: View {
             .disabled(recorder.phase != .recording && recorder.phase != .paused)
             }
         }
-        .padding(.top, 6)
+        .padding(.top, Space.line)
     }
 
     private var statusText: String {
@@ -103,11 +102,11 @@ struct RecordingView: View {
 
     private var clock: some View {
         MarginRow(metrics: metrics) {
-            VStack(alignment: .trailing, spacing: 2) {
+            VStack(alignment: .trailing, spacing: Space.tight) {
                 Text("Began")
                     .font(Typeface.note(.caption))
                     .foregroundStyle(Color.pencil)
-                Text(startedAt.formatted(date: .omitted, time: .shortened))
+                Text((recorder.startedAt ?? Date()).formatted(date: .omitted, time: .shortened))
                     .font(Typeface.note(.footnote, .medium).monospacedDigit())
                     .foregroundStyle(Color.ink)
             }
@@ -120,7 +119,7 @@ struct RecordingView: View {
                 .minimumScaleFactor(0.6)
                 .accessibilityLabel("Elapsed \(clockText(recorder.elapsed))")
         }
-        .padding(.top, 18)
+        .padding(.top, Space.group)
     }
 
     private var liveText: some View {
@@ -142,11 +141,12 @@ struct RecordingView: View {
                             .textSelection(.enabled)
                     }
                 }
-                .padding(.vertical, 18)
+                .padding(.vertical, Space.group)
                 Color.clear.frame(height: 1).id("end")
             }
             .scrollIndicators(.hidden)
-            .defaultScrollAnchor(.bottom)
+            // Live text grows from the bottom, next to the controls; the hint sits at the top.
+            .defaultScrollAnchor(recorder.finalizedText.isEmpty && recorder.volatileText.isEmpty ? .top : .bottom)
             .onChange(of: recorder.finalizedText.count + recorder.volatileText.count) {
                 withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("end", anchor: .bottom) }
             }
@@ -178,17 +178,17 @@ struct RecordingView: View {
                 .buttonStyle(PressableStyle())
                 .accessibilityLabel(recorder.phase == .paused ? "Resume" : "Pause")
             }
-            .padding(.horizontal, 36)
-            .padding(.top, 18)
-            .padding(.bottom, 10)
+            .padding(.horizontal, Space.part)
+            .padding(.top, Space.group)
+            .padding(.bottom, Space.item)
             .disabled(recorder.phase != .recording && recorder.phase != .paused)
         }
         .background(Color.paper)
     }
 
     private func start() async {
+        // Reopened while a recording runs (from the Live Activity or the list): just show it.
         guard recorder.phase == .idle else { return }
-        startedAt = Date()
         do {
             try await recorder.start(store: store)
         } catch {

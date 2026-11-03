@@ -57,14 +57,27 @@ public struct MeetingSummary: Codable, Hashable, Sendable {
     public var decisions: [String]
     public var actionItems: [String]
     public var generatedAt: Date
+    /// Set when part of the meeting couldn't be summarized (Apple Intelligence refused it), so
+    /// the reader knows the summary has a gap. Optional, so older saved summaries still decode.
+    public var caveat: String?
+    /// Who wrote this summary. Every summary so far has been Apple Intelligence on the iPhone, so
+    /// a summary saved before this field existed reads as that.
+    public var source: Source?
 
-    public init(title: String, overview: String, keyPoints: [String], decisions: [String], actionItems: [String], generatedAt: Date = Date()) {
+    public enum Source: String, Codable, Sendable {
+        case appleIntelligence
+        case pc
+    }
+
+    public init(title: String, overview: String, keyPoints: [String], decisions: [String], actionItems: [String], generatedAt: Date = Date(), caveat: String? = nil, source: Source? = .appleIntelligence) {
         self.title = title
         self.overview = overview
         self.keyPoints = keyPoints
         self.decisions = decisions
         self.actionItems = actionItems
         self.generatedAt = generatedAt
+        self.caveat = caveat
+        self.source = source
     }
 }
 
@@ -168,5 +181,53 @@ public struct Meeting: Codable, Hashable, Identifiable, Sendable {
 
     public static func defaultTitle(for date: Date) -> String {
         "Meeting – " + date.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+    }
+}
+
+// MARK: - Where each part came from
+
+extension Meeting {
+    /// The PC's engine in words: "Whisper large-v3 with pyannote speaker detection".
+    private var pcEngine: String? {
+        guard let engine = transcriptEngine else { return nil }
+        var readable = engine.replacingOccurrences(of: "WhisperX ", with: "Whisper ")
+        if let plus = readable.range(of: " + ") {
+            readable = readable[..<plus.lowerBound] + " with pyannote speaker detection"
+        }
+        return readable
+    }
+
+    /// Where the transcript and speakers came from, e.g. "your PC (Whisper large-v3 with …)".
+    public var transcriptSource: String {
+        pcEngine.map { "your PC (\($0))" } ?? "this iPhone"
+    }
+
+    /// Who wrote the summary, or nil if there isn't one.
+    public var summarySource: String? {
+        guard let summary else { return nil }
+        switch summary.source ?? .appleIntelligence {
+        case .appleIntelligence: return "Apple Intelligence on this iPhone"
+        case .pc: return "your PC"
+        }
+    }
+
+    /// One accurate sentence about what made this meeting's minutes: all on the iPhone, the
+    /// transcript on the PC and the summary on the iPhone, or all on the PC.
+    public var provenance: String {
+        let summaryOnPhone = summary.map { ($0.source ?? .appleIntelligence) == .appleIntelligence }
+        switch (pcEngine, summaryOnPhone) {
+        case (nil, true?):
+            return "Made entirely on this iPhone: the transcript by Apple's speech recognition, who spoke by on-device speaker detection, and this summary by Apple Intelligence."
+        case (let engine?, true?):
+            return "The transcript and speakers came from your PC (\(engine)). This summary was written on this iPhone by Apple Intelligence."
+        case (let engine?, false?):
+            return "The transcript, speakers and this summary all came from your PC (\(engine))."
+        case (nil, false?):
+            return "The transcript and speakers were made on this iPhone. This summary came from your PC."
+        case (nil, nil):
+            return "Transcript and speakers made on this iPhone by Apple's speech recognition and on-device speaker detection."
+        case (let engine?, nil):
+            return "Transcript and speakers from your PC (\(engine))."
+        }
     }
 }

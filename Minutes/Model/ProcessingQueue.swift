@@ -67,6 +67,7 @@ final class ProcessingQueue {
         }
 
         stages[id] = job.firstStage
+        RecordingActivityController.shared.processing(job.firstStage, for: id)
         UIApplication.shared.isIdleTimerDisabled = true
         // A few minutes of grace if the user locks the phone right after stopping. Beyond that
         // iOS suspends the app; the meeting stays `.processing` and resumes on next launch.
@@ -79,6 +80,7 @@ final class ProcessingQueue {
         let report: @Sendable (PipelineStage) -> Void = { [weak self] stage in
             Task { @MainActor in
                 if self?.stages[id] != nil { self?.stages[id] = stage }
+                RecordingActivityController.shared.processing(stage, for: id)
             }
         }
         let settings = Preferences.pipelineSettings
@@ -109,6 +111,7 @@ final class ProcessingQueue {
                 // names still apply.
                 if case .summary = job { result.speakerNames = latest.speakerNames }
                 store.save(result)
+                RecordingActivityController.shared.done(result)
             }
             stages[id] = nil
             worker = nil

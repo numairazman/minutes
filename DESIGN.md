@@ -78,6 +78,14 @@ The share sheet, the Files picker and the keyboard stay iOS's own. They're how O
   - a perforated edge on the record dock;
   - full-page ruled lines behind text (they can't stay aligned with Dynamic Type).
 
+## Lock screen
+
+The Live Activity is a card off the same pad. It has a paper background, a margin with the state mark (red dot recording, grey paused, a pencil while processing, a tick when done) and the start time, then the red rule. The page holds the status in New York, the clock, the pen trace as a `Shape` and the latest words. It follows the meeting past Stop through transcribing and the summary, and ends on the meeting's title for 15 minutes. If the app leaves the screen mid-processing the card says "Open Minutes to finish", because Apple Intelligence won't run in the background. The Dynamic Island uses the night inks (it's always black): a red dot and red clock when compact, trace and controls when expanded. Pause/Resume run as intents without opening the app. Stop opens Minutes, so processing has the app on screen.
+
+![Live Activity](docs/design/live-activity.png)
+
+Lock-screen widgets: the record key (circular), "Record a meeting" (inline) and the last meeting (rectangular, which needs the App Group, see `project.yml`). There's also a Record control for the lock screen's corners, Control Center and the Action button.
+
 ## Icon
 
 The same page: green paper, ruled lines, the red margin, and a navy pen trace ending in a red tip. It has a dark variant ([AppIcon.appiconset](Minutes/Resources/Assets.xcassets/AppIcon.appiconset)).

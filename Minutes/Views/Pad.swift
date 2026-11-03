@@ -26,7 +26,7 @@ final class Pad {
 }
 
 private struct PageMetricsKey: EnvironmentKey {
-    static let defaultValue = PageMetrics(marginWidth: 62)
+    static let defaultValue = PageMetrics(marginWidth: 58)
 }
 
 extension EnvironmentValues {
@@ -39,7 +39,7 @@ extension EnvironmentValues {
 /// Lays a screen out with its own `Pad` host on top, so cards cover the top bar too.
 struct PadHost: View {
     let pad: Pad
-    @ScaledMetric(relativeTo: .footnote) private var marginWidth: CGFloat = 62
+    @ScaledMetric(relativeTo: .footnote) private var marginWidth: CGFloat = 58
     @State private var drag: CGFloat = 0
 
     var body: some View {
@@ -56,8 +56,8 @@ struct PadHost: View {
                 card.content
                     .environment(\.pageMetrics, metrics)
                     .environment(pad)
-                    .padding(.top, 26)
-                    .padding(.bottom, 10)
+                    .padding(.top, Space.part)
+                    .padding(.bottom, Space.item)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(alignment: .top) {
                         UnevenRoundedRectangle(topLeadingRadius: 26, topTrailingRadius: 26, style: .continuous)
@@ -99,7 +99,7 @@ struct PadHeading: View {
 
     var body: some View {
         MarginRow(metrics: metrics) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Space.line) {
                 Text(title)
                     .font(Typeface.page(.title2, .semibold))
                     .foregroundStyle(Color.ink)
@@ -112,7 +112,7 @@ struct PadHeading: View {
                 }
             }
         }
-        .padding(.bottom, 14)
+        .padding(.bottom, Space.row)
     }
 }
 
@@ -137,7 +137,7 @@ struct PadAction: View {
                         .font(Typeface.page(.body))
                         .foregroundStyle(destructive ? Color.margin : Color.ink)
                 }
-                .padding(.vertical, 14)
+                .padding(.vertical, Space.row)
                 RuledLine()
             }
             .contentShape(Rectangle())
@@ -159,7 +159,7 @@ struct PadButtons: View {
 
     var body: some View {
         MarginRow(metrics: metrics, alignment: .center) {
-            HStack(spacing: 18) {
+            HStack(spacing: Space.group) {
                 Button(title, action: action)
                     .buttonStyle(InkFilledStyle(color: destructive ? .margin : .ballpoint))
                     .disabled(!enabled)
@@ -169,8 +169,8 @@ struct PadButtons: View {
                     .foregroundStyle(Color.pencil)
             }
         }
-        .padding(.top, 10)
-        .padding(.bottom, 6)
+        .padding(.top, Space.item)
+        .padding(.bottom, Space.line)
     }
 }
 
@@ -212,8 +212,8 @@ struct NoticeCard: View {
                 }
                 .buttonStyle(InkFilledStyle(color: .ballpoint))
             }
-            .padding(.top, 10)
-            .padding(.bottom, 6)
+            .padding(.top, Space.item)
+            .padding(.bottom, Space.line)
         }
     }
 }
@@ -239,7 +239,7 @@ struct RenameCard: View {
                     .submitLabel(.done)
                     .onSubmit(commit)
             }
-            .padding(.bottom, 12)
+            .padding(.bottom, Space.item)
             PadButtons(title: "Save", action: commit)
         }
         .onAppear {
@@ -266,8 +266,8 @@ struct InkFilledStyle: ButtonStyle {
         configuration.label
             .font(Typeface.note(.body, .semibold))
             .foregroundStyle(Color.paper)
-            .padding(.horizontal, 22)
-            .padding(.vertical, 11)
+            .padding(.horizontal, Space.group)
+            .padding(.vertical, Space.item)
             .background(Capsule().fill(isEnabled ? color : Color.pencil.opacity(0.5)))
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
@@ -282,7 +282,7 @@ struct InkField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Space.line) {
             Group {
                 if secure {
                     SecureField("", text: $text, prompt: Text(placeholder).foregroundStyle(Color.pencil.opacity(0.7)))
@@ -310,7 +310,7 @@ struct TickBoxStyle: ToggleStyle {
         Button {
             configuration.isOn.toggle()
         } label: {
-            HStack(alignment: .center, spacing: 14) {
+            HStack(alignment: .center, spacing: Space.row) {
                 configuration.label
                     .font(Typeface.page(.body))
                     .foregroundStyle(Color.ink)

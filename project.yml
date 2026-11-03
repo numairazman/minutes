@@ -32,8 +32,16 @@ targets:
     platform: iOS
     sources:
       - path: Minutes
+      - path: Shared
     dependencies:
       - package: MinutesCore
+      - target: MinutesWidgets
+    entitlements:
+      path: Minutes/Minutes.entitlements
+      properties:
+        # Shared with the widget extension: the last-meeting widget reads it. Without it (or if
+        # signing can't provision it) the widget falls back to "Record a meeting".
+        com.apple.security.application-groups: [group.com.numairazman.minutes]
     info:
       path: Minutes/Info.plist
       properties:
@@ -54,6 +62,13 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         NSLocalNetworkUsageDescription: Minutes connects to your PC on this network when you choose to re-process a meeting there for maximum accuracy.
+        # minutes://pair?address=…&token=… — the pairing QR code sets up the PC server, so
+        # nobody has to type its token.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.numairazman.minutes
+            CFBundleURLSchemes: [minutes]
+        # The recording's Live Activity: lock screen and Dynamic Island.
+        NSSupportsLiveActivities: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.numairazman.minutes
@@ -61,6 +76,33 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: false
+
+  # Live Activity, lock-screen widgets and the Record control.
+  MinutesWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: MinutesWidgets
+      - path: Shared
+      # The pad's colours and type, so the lock screen matches the app.
+      - path: Minutes/Views/Theme.swift
+    entitlements:
+      path: MinutesWidgets/MinutesWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.numairazman.minutes]
+    info:
+      path: MinutesWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: Minutes
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.numairazman.minutes.widgets
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: false
+        # Shared intent code compiles here too but only acts inside the app.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) WIDGET_EXTENSION"
 
 schemes:
   Minutes:

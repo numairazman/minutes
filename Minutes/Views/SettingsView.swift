@@ -13,11 +13,12 @@ struct SettingsView: View {
     @AppStorage(Preferences.exportTimestampsKey) private var exportTimestamps = true
     @AppStorage(Preferences.serverAddressKey) private var serverAddress = ""
 
-    @ScaledMetric(relativeTo: .footnote) private var marginWidth: CGFloat = 62
+    @ScaledMetric(relativeTo: .footnote) private var marginWidth: CGFloat = 58
 
     @State private var locales: [Locale] = []
     @State private var speechModel: ModelState = .checking
     @State private var speakerModel: ModelState = .checking
+    @State private var summaries: ModelState = .checking
     @State private var serverToken = ServerToken.value
     @State private var connection: Connection?
 
@@ -58,7 +59,7 @@ struct SettingsView: View {
                         .foregroundStyle(Color.ink)
                         .accessibilityAddTraits(.isHeader)
                 }
-                .padding(.top, 4)
+                .padding(.top, Space.line)
 
                 transcription
                 recording
@@ -66,7 +67,7 @@ struct SettingsView: View {
                 pcServer
                 onDevice
             }
-            .padding(.bottom, 40)
+            .padding(.bottom, Space.section)
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
@@ -77,6 +78,7 @@ struct SettingsView: View {
         }
         .tint(.ballpoint)
         .task { await refresh() }
+        .onAppear { serverToken = ServerToken.value }
         .onChange(of: localeID) { Task { await refresh() } }
         .onChange(of: serverToken) { ServerToken.save(serverToken); connection = nil }
         .onChange(of: serverAddress) { connection = nil }
@@ -91,7 +93,7 @@ struct SettingsView: View {
                     pad.show { languageCard }
                 } label: {
                     HStack {
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: Space.tight) {
                             Text("Language")
                                 .font(Typeface.page(.body))
                                 .foregroundStyle(Color.ink)
@@ -110,7 +112,7 @@ struct SettingsView: View {
                 .accessibilityValue(languageName(localeID))
             }
             row {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: Space.line) {
                     Text("Names and terms")
                         .font(Typeface.page(.body))
                         .foregroundStyle(Color.ink)
@@ -127,14 +129,14 @@ struct SettingsView: View {
                         .accessibilityLabel("Names and terms")
                 }
             }
-            note("One per line: people's names, company and product names, acronyms. The transcriber leans toward these spellings, which fixes most of the words it would otherwise get wrong.")
+            note("One per line: people, companies, products, acronyms. The transcriber leans toward these spellings, which fixes most of the words it gets wrong.")
         }
     }
 
     private var recording: some View {
         section("Recording") {
             row { Toggle("Keep the screen on while recording", isOn: $keepScreenOn).toggleStyle(TickBoxStyle()) }
-            note("Recording carries on with the screen locked either way. Keeping it on lets you glance at the live transcript; it uses more battery, so it's best while plugged in.")
+            note("Recording carries on with the screen locked either way. Keeping it on uses more battery, so it's best while plugged in.")
         }
     }
 
@@ -142,7 +144,7 @@ struct SettingsView: View {
         section("Export") {
             row { Toggle("Include the summary", isOn: $exportSummary).toggleStyle(TickBoxStyle()) }
             row { Toggle("Include timestamps", isOn: $exportTimestamps).toggleStyle(TickBoxStyle()) }
-            note("Exports are plain text, so they open anywhere: OneDrive, Word, Notes, email.")
+            note("Plain text, so exports open anywhere: OneDrive, Word, Notes, email.")
         }
     }
 
@@ -164,7 +166,7 @@ struct SettingsView: View {
                 connectionMark
                     .font(.system(size: 13, weight: .semibold))
             } page: {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Space.item) {
                     Button(connection == .testing ? "Testing" : "Test connection") {
                         Task { await testConnection() }
                     }
@@ -183,8 +185,9 @@ struct SettingsView: View {
                     }
                 }
             }
-            .padding(.vertical, 14)
-            note("Optional. With the Minutes server running on a PC on this network, a meeting's ⋯ menu can send that one recording to the PC, which transcribes it again with Whisper large-v3 and identifies the speakers again. The summary is still written on this iPhone. Nothing is sent unless you choose it for a meeting.")
+            .padding(.vertical, Space.row)
+            note("No typing needed: on your Mac, run swift server/pairing-qr.swift in the Minutes folder and scan the code with the Camera. The token is the server's password.")
+            note("A meeting's ⋯ menu can then send its recording to your PC for Whisper large-v3 and a second look at who spoke. Nothing is sent unless you choose it.")
         }
     }
 
@@ -201,43 +204,35 @@ struct SettingsView: View {
         section("On this iPhone") {
             model("Speech model", speechModel)
             model("Speaker model", speakerModel)
-            MarginRow(metrics: metrics) {
-                Image(systemName: summaryAvailable ? "checkmark" : "exclamationmark.triangle")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(summaryAvailable ? Ink.color(for: "2") : Color.margin)
-            } page: {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Summaries").font(Typeface.page(.body)).foregroundStyle(Color.ink)
-                    Text(summaryStatus).font(Typeface.note(.footnote)).foregroundStyle(Color.pencil)
-                }
-            }
-            .padding(.vertical, 10)
+            model("Summaries", summaries, ready: "Apple Intelligence answered just now")
             if speechModel == .missing || speakerModel == .missing || isFailed {
                 MarginRow(metrics: metrics) {
                     Button("Download models") { Task { await download() } }
                         .buttonStyle(InkCapsuleStyle())
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, Space.line)
             }
-            note("Everything runs on this iPhone. The models download once; after that Minutes works offline, and your audio and transcripts never leave the device unless you export them or re-process a meeting on your PC.")
+            note("The models download once; after that Minutes works offline. Your audio and transcripts stay on this iPhone unless you export them or send one to your PC.")
         }
     }
 
-    private func model(_ name: String, _ state: ModelState) -> some View {
+    private func model(_ name: String, _ state: ModelState, ready: String? = nil) -> some View {
         MarginRow(metrics: metrics) {
             Image(systemName: state.icon)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(state == .ready ? Ink.color(for: "2") : (isFailed(state) ? Color.margin : Color.pencil))
         } page: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Space.tight) {
                 Text(name).font(Typeface.page(.body)).foregroundStyle(Color.ink)
-                Text(state.text).font(Typeface.note(.footnote)).foregroundStyle(Color.pencil)
+                Text(state == .ready ? (ready ?? state.text) : state.text)
+                    .font(Typeface.note(.footnote))
+                    .foregroundStyle(isFailed(state) ? Color.margin : Color.pencil)
                 if case .downloading(let p) = state {
-                    InkProgress(fraction: p > 0 ? p : nil).frame(maxWidth: 180).padding(.top, 4)
+                    InkProgress(fraction: p > 0 ? p : nil).frame(maxWidth: 180).padding(.top, Space.tight)
                 }
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, Space.item)
     }
 
     // MARK: - Language
@@ -272,7 +267,7 @@ struct SettingsView: View {
                         .font(Typeface.page(.body, id == localeID ? .semibold : .regular))
                         .foregroundStyle(Color.ink)
                 }
-                .padding(.vertical, 12)
+                .padding(.vertical, Space.item)
                 RuledLine()
             }
             .contentShape(Rectangle())
@@ -295,21 +290,21 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 0) {
             MarginRow(metrics: metrics) {
                 Text(title)
-                    .font(Typeface.page(.title2, .semibold))
+                    .font(Typeface.page(.title3, .semibold))
                     .foregroundStyle(Color.ink)
                     .accessibilityAddTraits(.isHeader)
             }
-            .padding(.bottom, 6)
+            .padding(.bottom, Space.line)
             RuledLine()
             content()
         }
-        .padding(.top, 34)
+        .padding(.top, Space.section)
     }
 
     private func row<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         VStack(spacing: 0) {
             MarginRow(metrics: metrics) { content() }
-                .padding(.vertical, 14)
+                .padding(.vertical, Space.row)
             RuledLine()
         }
     }
@@ -319,27 +314,27 @@ struct SettingsView: View {
             Text(text)
                 .font(Typeface.note(.footnote))
                 .foregroundStyle(Color.pencil)
+                .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, 10)
+        .padding(.top, Space.item)
     }
 
     // MARK: - State
 
     private var isFailed: Bool { isFailed(speechModel) || isFailed(speakerModel) }
 
+    private func checkSummaries() async {
+        summaries = .checking
+        switch await MeetingSummarizer.check() {
+        case .available: summaries = .ready
+        case .unavailable(let reason): summaries = .failed(reason)
+        }
+    }
+
     private func isFailed(_ state: ModelState) -> Bool {
         if case .failed = state { return true }
         return false
-    }
-
-    private var summaryAvailable: Bool { MeetingSummarizer.availability == .available }
-
-    private var summaryStatus: String {
-        switch MeetingSummarizer.availability {
-        case .available: return "Written by Apple Intelligence on this iPhone"
-        case .unavailable(let reason): return reason
-        }
     }
 
     private func refresh() async {
@@ -350,6 +345,7 @@ struct SettingsView: View {
         }
         speechModel = await SpeechModel.isInstalled(locale: Preferences.locale) ? .ready : .missing
         speakerModel = await SpeakerDiarizer.shared.isPrepared ? .ready : .missing
+        await checkSummaries()
     }
 
     private func testConnection() async {

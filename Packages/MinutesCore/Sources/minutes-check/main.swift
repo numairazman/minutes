@@ -20,6 +20,23 @@ func usage() -> Never {
 }
 
 var args = Array(CommandLine.arguments.dropFirst())
+
+// --summarize transcript.txt: only the summary step, on "Name: text" lines — for checking how
+// Apple Intelligence handles a given transcript without recording or transcribing anything.
+if args.first == "--summarize", args.count >= 2 {
+    let lines = try String(contentsOfFile: args[1], encoding: .utf8).components(separatedBy: .newlines)
+    do {
+        let summary = try await MeetingSummarizer.summarize(lines: lines) { print("[check] \($0)") }
+        print("title: \(summary.title)\noverview: \(summary.overview)")
+        for (name, items) in [("key points", summary.keyPoints), ("decisions", summary.decisions), ("action items", summary.actionItems)] {
+            print("\(name):"); items.forEach { print("  - \($0)") }
+        }
+    } catch {
+        print("summary failed: \(error.localizedDescription)")
+    }
+    exit(0)
+}
+
 guard let path = args.first, !path.hasPrefix("--") else { usage() }
 args.removeFirst()
 var speakers: Int?

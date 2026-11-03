@@ -6,6 +6,8 @@ A meeting recorder for iPhone. Press Record, and when you stop it gives you:
 - a **summary**: overview, key points, decisions, action items
 - a plain **.txt export** through the share sheet: Save to Files › OneDrive, the OneDrive app, Mail, AirDrop
 
+While recording, a **Live Activity** on the lock screen and in the Dynamic Island shows the clock, a live trace and the latest words, with Pause and Stop. Lock-screen widgets and a Control start a recording in one tap.
+
 Everything runs **on the iPhone**. Audio and transcripts never leave the device unless you export them, or choose to re-process a meeting on your own PC (below).
 
 ## Requirements
