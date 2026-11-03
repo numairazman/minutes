@@ -1,0 +1,68 @@
+# XcodeGen project definition for Minutes.
+# Generate the Xcode project with:  xcodegen generate
+# (Minutes.xcodeproj and Minutes/Info.plist are generated and gitignored — edit this file instead.)
+
+name: Minutes
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: "56KRANZJ75"
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # iOS 26 is the floor for SpeechAnalyzer (on-device long-form transcription) and the
+    # Foundation Models framework (on-device summaries).
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    SWIFT_VERSION: "5.0"
+
+options:
+  bundleIdPrefix: com.numairazman
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+packages:
+  MinutesCore:
+    path: Packages/MinutesCore
+
+targets:
+  Minutes:
+    type: application
+    platform: iOS
+    sources:
+      - path: Minutes
+    dependencies:
+      - package: MinutesCore
+    info:
+      path: Minutes/Info.plist
+      properties:
+        CFBundleDisplayName: Minutes
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        NSMicrophoneUsageDescription: Minutes records your meetings so it can transcribe them on this iPhone.
+        NSSpeechRecognitionUsageDescription: Minutes transcribes your recordings on this iPhone. Audio never leaves the device.
+        # Keeps recording with the screen locked or another app in front.
+        UIBackgroundModes: [audio]
+        # Recordings and their folders show up in the Files app under On My iPhone › Minutes.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.numairazman.minutes
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: false
+
+schemes:
+  Minutes:
+    build:
+      targets:
+        Minutes: all
+    run:
+      config: Debug
+    archive:
+      config: Release
