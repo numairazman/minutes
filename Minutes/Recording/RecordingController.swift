@@ -31,7 +31,11 @@ final class RecordingController {
     private(set) var phase: Phase = .idle
     private(set) var meetingID: UUID?
     private(set) var elapsed: TimeInterval = 0
-    private(set) var levels: [Float] = Array(repeating: 0, count: 48)
+    /// The last 12 s of input level at 20 samples a second — enough history for the pen trace to
+    /// read as a drawn line rather than a jagged few points.
+    private(set) var levels: [Float] = Array(repeating: 0, count: 240)
+    /// Samples taken so far; the pen trace derives each sample's wiggle from its absolute index.
+    private(set) var levelTick = 0
     /// The tail of the live transcript — enough to fill the screen. The whole text of an hour
     /// would be re-laid-out by SwiftUI on every update.
     private(set) var finalizedText = ""
@@ -57,6 +61,7 @@ final class RecordingController {
         volatileText = ""
         elapsed = 0
         levels = Array(repeating: 0, count: levels.count)
+        levelTick = 0
 
         guard await AVAudioApplication.requestRecordPermission() else {
             phase = .idle
@@ -237,6 +242,7 @@ final class RecordingController {
                 self.elapsed = sink.duration
                 self.levels.removeFirst()
                 self.levels.append(self.phase == .recording ? sink.takeLevel() : 0)
+                self.levelTick += 1
             }
         }
     }

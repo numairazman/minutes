@@ -23,12 +23,48 @@ public enum SummaryAvailability: Equatable, Sendable {
 public enum SummaryError: LocalizedError {
     case unavailable(String)
     case emptyTranscript
+    case failed(String)
 
     public var errorDescription: String? {
         switch self {
         case .unavailable(let reason): return reason
         case .emptyTranscript: return "There's nothing in the transcript to summarize."
+        case .failed(let reason): return reason
         }
+    }
+
+    /// FoundationModels errors describe themselves as "The operation couldn't be completed.
+    /// (FoundationModels…GenerationError error -1.)", which means nothing to the person reading
+    /// the meeting. Say what happened and what to do instead; the transcript is always intact.
+    static func plain(_ error: Error) -> SummaryError {
+        if let error = error as? SummaryError { return error }
+        if let e = error as? LanguageModelSession.GenerationError {
+            switch e {
+            case .assetsUnavailable:
+                return .failed("Apple Intelligence is still getting ready on this iPhone. Try the summary again in a little while.")
+            case .guardrailViolation, .refusal:
+                return .failed("Apple Intelligence declined to summarize this meeting. The transcript is all here.")
+            case .unsupportedLanguageOrLocale:
+                return .failed("Apple Intelligence can't summarize meetings in this language yet.")
+            case .rateLimited, .concurrentRequests:
+                return .failed("Apple Intelligence is busy right now. Try the summary again in a moment.")
+            default:
+                break
+            }
+        }
+        if #available(iOS 27, macOS 27, *), let e = error as? LanguageModelError {
+            switch e {
+            case .guardrailViolation, .refusal:
+                return .failed("Apple Intelligence declined to summarize this meeting. The transcript is all here.")
+            case .unsupportedLanguageOrLocale:
+                return .failed("Apple Intelligence can't summarize meetings in this language yet.")
+            case .rateLimited, .timeout:
+                return .failed("Apple Intelligence is busy right now. Try the summary again in a moment.")
+            default:
+                break
+            }
+        }
+        return .failed("Apple Intelligence couldn't write a summary this time. The transcript is complete, and you can try the summary again.")
     }
 }
 
@@ -56,6 +92,14 @@ public enum MeetingSummarizer {
 
     /// - Parameter lines: the transcript as "Name: text" lines.
     public static func summarize(lines: [String], progress: @escaping @Sendable (String) -> Void = { _ in }) async throws -> MeetingSummary {
+        do {
+            return try await draft(lines: lines, progress: progress)
+        } catch {
+            throw SummaryError.plain(error)
+        }
+    }
+
+    private static func draft(lines: [String], progress: @escaping @Sendable (String) -> Void) async throws -> MeetingSummary {
         if case .unavailable(let reason) = availability { throw SummaryError.unavailable(reason) }
         let lines = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard !lines.isEmpty else { throw SummaryError.emptyTranscript }

@@ -1,0 +1,4 @@
+# torch/torchaudio/torchvision are installed first in the Dockerfile, from the CUDA or CPU index.
+whisperx==3.8.6
+fastapi==0.162.0
+uvicorn==0.54.0

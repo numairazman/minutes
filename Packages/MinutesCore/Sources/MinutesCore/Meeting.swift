@@ -100,6 +100,11 @@ public struct Meeting: Codable, Hashable, Identifiable, Sendable {
     public var processingError: String?
     public var speakerError: String?
     public var summaryError: String?
+    /// What produced the words and speakers when it wasn't this device, e.g.
+    /// "WhisperX large-v3 + speaker-diarization-community-1" after re-processing on the PC.
+    public var transcriptEngine: String?
+    /// Why re-processing on the PC failed. The transcript from before is kept.
+    public var serverError: String?
 
     public init(id: UUID = UUID(), title: String, createdAt: Date = Date(), localeIdentifier: String, status: Status = .recording) {
         self.id = id
@@ -119,6 +124,8 @@ public struct Meeting: Codable, Hashable, Identifiable, Sendable {
         self.processingError = nil
         self.speakerError = nil
         self.summaryError = nil
+        self.transcriptEngine = nil
+        self.serverError = nil
     }
 
     // Every field but the identity decodes with a default, so meetings saved by an older
@@ -142,6 +149,8 @@ public struct Meeting: Codable, Hashable, Identifiable, Sendable {
         processingError = try c.decodeIfPresent(String.self, forKey: .processingError)
         speakerError = try c.decodeIfPresent(String.self, forKey: .speakerError)
         summaryError = try c.decodeIfPresent(String.self, forKey: .summaryError)
+        transcriptEngine = try c.decodeIfPresent(String.self, forKey: .transcriptEngine)
+        serverError = try c.decodeIfPresent(String.self, forKey: .serverError)
     }
 
     public func displayName(forSpeaker key: String) -> String {

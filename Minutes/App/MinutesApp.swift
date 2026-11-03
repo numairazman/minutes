@@ -1,4 +1,5 @@
 import MinutesCore
+import Security
 import SwiftUI
 
 @main
@@ -43,6 +44,7 @@ enum Preferences {
     static let keepScreenOnKey = "keepScreenOn"
     static let exportTimestampsKey = "exportTimestamps"
     static let exportSummaryKey = "exportSummary"
+    static let serverAddressKey = "accuracyServerAddress"
 
     static var locale: Locale {
         if let id = UserDefaults.standard.string(forKey: localeKey), !id.isEmpty { return Locale(identifier: id) }
@@ -68,5 +70,38 @@ enum Preferences {
 
     static var pipelineSettings: PipelineSettings {
         PipelineSettings(locale: locale, vocabulary: vocabulary)
+    }
+
+    /// The PC for "Re-process for Maximum Accuracy", or nil until an address and token are set.
+    static var accuracyServer: AccuracyServer? {
+        AccuracyServer(address: UserDefaults.standard.string(forKey: serverAddressKey) ?? "", token: ServerToken.value)
+    }
+}
+
+/// The PC server's shared token, kept in the Keychain rather than in UserDefaults with the
+/// other settings.
+enum ServerToken {
+    private static let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: "com.numairazman.minutes.accuracy-server",
+        kSecAttrAccount as String: "token",
+    ]
+
+    static var value: String {
+        var lookup = query
+        lookup[kSecReturnData as String] = true
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(lookup as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return "" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    static func save(_ token: String) {
+        SecItemDelete(query as CFDictionary)
+        let token = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return }
+        var item = query
+        item[kSecValueData as String] = Data(token.utf8)
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        SecItemAdd(item as CFDictionary, nil)
     }
 }

@@ -49,6 +49,11 @@ targets:
         # Recordings and their folders show up in the Files app under On My iPhone › Minutes.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        # Optional "maximum accuracy" tier: plain http to the user's own PC on the local network.
+        # NSAllowsLocalNetworking exempts only local addresses from ATS, nothing on the internet.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Minutes connects to your PC on this network when you choose to re-process a meeting there for maximum accuracy.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.numairazman.minutes

@@ -9,9 +9,13 @@ import MinutesCore
 //
 // --live feeds the file through the same path a recording takes (BufferConverter → the PCM
 // recording file + LiveTranscriber) instead of transcribing the file directly.
+//
+// --server 192.168.1.20 re-processes on the PC's WhisperX server instead (the app's "Maximum
+// accuracy" tier), with the token from $MINUTES_SERVER_TOKEN. Words still go through the same
+// SpeakerAligner, summarizer and exporter.
 
 func usage() -> Never {
-    print("usage: minutes-check <audio-file> [--speakers N] [--live] [--no-summary] [--locale id] [--vocab a,b] [--out file.txt] [--json file.json] [--turns]")
+    print("usage: minutes-check <audio-file> [--speakers N] [--live | --server address] [--no-summary] [--locale id] [--vocab a,b] [--out file.txt] [--json file.json] [--turns]")
     exit(2)
 }
 
@@ -25,6 +29,7 @@ var locale = Locale(identifier: "en-US")
 var vocabulary: [String] = []
 var outPath: String?
 var jsonPath: String?
+var serverAddress: String?
 while let flag = args.first {
     args.removeFirst()
     switch flag {
@@ -36,6 +41,7 @@ while let flag = args.first {
     case "--vocab": vocabulary = (args.first ?? "").components(separatedBy: ","); args = Array(args.dropFirst())
     case "--out": outPath = args.first; args = Array(args.dropFirst())
     case "--json": jsonPath = args.first; args = Array(args.dropFirst())
+    case "--server": serverAddress = args.first; args = Array(args.dropFirst())
     default: usage()
     }
 }
@@ -93,26 +99,42 @@ log("summary model: \(MeetingSummarizer.availability)")
 
 let lastStage = Label()
 let pipelineStart = clock.now
-meeting = await MeetingPipeline.process(
-    meeting, audioURL: audioURL, liveWords: liveWords,
-    settings: PipelineSettings(locale: locale, vocabulary: vocabulary, summarize: summarize),
-    stage: { stage in
-        let label = stage.label
-        switch stage {
-        case .transcribing(let f), .identifyingSpeakers(let f):
-            if f > 0, f < 1, Int(f * 100) % 25 != 0 { return }
-        case .summarizing:
-            break
-        }
-        if label != lastStage.value { lastStage.value = label; log(label) }
+let settings = PipelineSettings(locale: locale, vocabulary: vocabulary, summarize: summarize)
+let report: @Sendable (PipelineStage) -> Void = { stage in
+    let label = stage.label
+    switch stage {
+    case .transcribing(let f), .identifyingSpeakers(let f), .remote(_, let f):
+        if f > 0, f < 1, Int(f * 100) % 25 != 0 { return }
+    case .summarizing:
+        break
     }
-)
+    if label != lastStage.value { lastStage.value = label; log(label) }
+}
+if let serverAddress {
+    guard let server = AccuracyServer(address: serverAddress, token: ProcessInfo.processInfo.environment["MINUTES_SERVER_TOKEN"] ?? "") else {
+        log("--server needs an address and MINUTES_SERVER_TOKEN in the environment")
+        exit(2)
+    }
+    do {
+        let status = try await server.status()
+        log("server \(server.baseURL): \(status.state), \(status.model) on \(status.device)\(status.message.map { " — \($0)" } ?? "")")
+    } catch {
+        log("server: \(error.localizedDescription)")
+        exit(1)
+    }
+    meeting.duration = AudioFiles.duration(of: audioURL)
+    meeting = await MeetingPipeline.reprocessOnServer(meeting, audioURL: audioURL, server: server, settings: settings, stage: report)
+    meeting.status = meeting.serverError == nil ? .ready : .failed
+    log("engine: \(meeting.transcriptEngine ?? "-")")
+} else {
+    meeting = await MeetingPipeline.process(meeting, audioURL: audioURL, liveWords: liveWords, settings: settings, stage: report)
+}
 log("pipeline: \(clock.now - pipelineStart), status \(meeting.status)")
 log("words \(meeting.words.count), turns \(meeting.speakerTurns.count), utterances \(meeting.utterances.count), speakers \(meeting.speakers)")
 if CommandLine.arguments.contains("--turns") || meeting.speakerTurns.count <= 40 {
     for t in meeting.speakerTurns { log(String(format: "turn %@ %7.2f-%7.2f", t.speaker, t.start, t.end)) }
 }
-for issue in [meeting.processingError, meeting.speakerError, meeting.summaryError].compactMap({ $0 }) {
+for issue in [meeting.processingError, meeting.speakerError, meeting.summaryError, meeting.serverError].compactMap({ $0 }) {
     log("issue: \(issue)")
 }
 

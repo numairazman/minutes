@@ -6,7 +6,7 @@ A meeting recorder for iPhone. Press Record, and when you stop it gives you:
 - a **summary**: overview, key points, decisions, action items
 - a plain **.txt export** through the share sheet: Save to Files › OneDrive, the OneDrive app, Mail, AirDrop
 
-Everything runs **on the iPhone**. Audio and transcripts never leave the device unless you export them.
+Everything runs **on the iPhone**. Audio and transcripts never leave the device unless you export them, or choose to re-process a meeting on your own PC (below).
 
 ## Requirements
 
@@ -53,6 +53,12 @@ Run on a Mac (M1 Pro) with `minutes-check` (below), same code as the app:
 
 The iPhone will be slower than the M1 Pro. Real-meeting accuracy on the phone's microphone hasn't been measured yet.
 
+- **The same AMI meeting re-processed on the PC** (RTX 3070 Ti, WhisperX large-v3 + pyannote): **97.1%** of words to the right speaker (97.2% with 4 speakers set), 68 s of GPU time. Word error rate against AMI's transcript: 21.5% on device, 21.4% on the PC; the PC makes ~19% fewer wrong words, but both miss the same short "yeah"/"okay" interjections in crosstalk. Details: [server/README.md](server/README.md#measured).
+
+## Maximum accuracy on a PC (optional)
+
+For meetings where the last few percent of words matter, **⋯ › Re-process for Maximum Accuracy** sends that one recording to a server on a PC on the same network: WhisperX with Whisper large-v3, wav2vec2 word alignment and pyannote community-1 diarization, in Docker, on an NVIDIA GPU if there is one. It returns words and speaker turns in the same shapes the on-device models produce, so speaker matching, the summary (still Apple Intelligence on the iPhone) and export are unchanged. On-device stays the default; the menu item only appears once a PC is set up in Settings › Maximum accuracy (PC). Setup, deploy and API: [server/README.md](server/README.md).
+
 ## Running the pipeline on a Mac
 
 ```bash
@@ -60,9 +66,8 @@ cd Packages/MinutesCore
 swift run minutes-check ~/Desktop/meeting.m4a --out ~/Desktop/meeting.txt
 ```
 
-Flags: `--speakers N`, `--live` (feeds the file through the recorder's path instead), `--no-summary`, `--locale en-GB`, `--vocab "Name,Acronym"`, `--json meeting.json`, `--turns`. Needs macOS 26+ and, for summaries, Apple Intelligence on the Mac.
+Flags: `--speakers N`, `--live` (feeds the file through the recorder's path instead), `--server 192.168.1.20` (re-processes on the PC server instead, token in `$MINUTES_SERVER_TOKEN`), `--no-summary`, `--locale en-GB`, `--vocab "Name,Acronym"`, `--json meeting.json`, `--turns`. `python3 server/eval/score_speakers.py meeting.json reference.rttm` scores speaker attribution against a reference RTTM. Needs macOS 26+ and, for summaries, Apple Intelligence on the Mac.
 
 ## Not done yet
 
-- **Windows "maximum accuracy" server**: optional re-processing of a recording on a PC's GPU with Whisper large-v3 + pyannote, for meetings where the last few percent matter.
 - Processing can't yet continue in the background (iOS 26 `BGContinuedProcessingTask` would allow it).

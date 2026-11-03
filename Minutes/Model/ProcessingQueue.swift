@@ -13,6 +13,15 @@ final class ProcessingQueue {
         case full(liveWords: [TimedWord]?)
         case speakers
         case summary
+        /// Opt-in: transcribe and identify speakers again on the PC, then summarize here.
+        case server(AccuracyServer)
+
+        var firstStage: PipelineStage {
+            switch self {
+            case .full, .speakers, .summary: return .transcribing(0)
+            case .server: return .remote("Sending to PC…", 0)
+            }
+        }
     }
 
     private(set) var stages: [UUID: PipelineStage] = [:]
@@ -57,7 +66,7 @@ final class ProcessingQueue {
             return
         }
 
-        stages[id] = .transcribing(0)
+        stages[id] = job.firstStage
         UIApplication.shared.isIdleTimerDisabled = true
         // A few minutes of grace if the user locks the phone right after stopping. Beyond that
         // iOS suspends the app; the meeting stays `.processing` and resumes on next launch.
@@ -86,6 +95,8 @@ final class ProcessingQueue {
                 result = await MeetingPipeline.summarize(result, stage: report)
             case .summary:
                 result = await MeetingPipeline.summarize(meeting, stage: report)
+            case .server(let server):
+                result = await MeetingPipeline.reprocessOnServer(meeting, audioURL: audioURL, server: server, settings: settings, stage: report)
             }
 
             // Keep what the user changed while this ran. A deleted meeting stays deleted.
@@ -94,7 +105,8 @@ final class ProcessingQueue {
                     result.title = latest.title
                     result.titleIsCustom = true
                 }
-                // Re-identifying speakers decides for itself whether old names still apply.
+                // Re-identifying speakers (here or on the PC) decides for itself whether old
+                // names still apply.
                 if case .summary = job { result.speakerNames = latest.speakerNames }
                 store.save(result)
             }

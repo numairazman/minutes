@@ -11,3 +11,7 @@ xcuserdata/
 *.xcuserstate
 
 .DS_Store
+
+# Server secrets (MINUTES_TOKEN, HF_TOKEN)
+server/.env
+__pycache__/

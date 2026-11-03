@@ -7,112 +7,212 @@ struct MeetingListView: View {
     @Environment(ProcessingQueue.self) private var processing
     @Environment(RecordingController.self) private var recorder
 
-    @State private var path: [UUID] = []
+    @ScaledMetric(relativeTo: .footnote) private var marginWidth: CGFloat = 62
+
+    @State private var path: [Route] = []
     @State private var showingRecorder = false
     @State private var showingImporter = false
-    @State private var showingSettings = false
-    @State private var pendingDelete: Meeting?
-    @State private var errorMessage: String?
+    @State private var pad = Pad()
+
+    private var metrics: PageMetrics { PageMetrics(marginWidth: marginWidth) }
+
+    enum Route: Hashable {
+        case meeting(UUID)
+        case settings
+    }
 
     var body: some View {
-        NavigationStack(path: $path) {
-            Group {
-                if store.meetings.isEmpty {
-                    ContentUnavailableView {
-                        Label("No meetings yet", systemImage: "waveform")
-                    } description: {
-                        Text("Tap Record when your meeting starts. When you stop, Minutes transcribes it, works out who said what, and writes a summary — all on this iPhone.")
+        ZStack {
+            NavigationStack(path: $path) {
+                page
+                    .background(PaperPage(metrics: metrics))
+                    .toolbar(.hidden, for: .navigationBar)
+                    .safeAreaInset(edge: .top, spacing: 0) {
+                        PageBar {
+                            BarKey(systemImage: "slider.horizontal.3", label: "Settings") { path.append(.settings) }
+                        } trailing: {
+                            BarKey(systemImage: "tray.and.arrow.down", label: "Import audio") { showingImporter = true }
+                        }
                     }
-                } else {
-                    list
-                }
+                    .safeAreaInset(edge: .bottom, spacing: 0) { recordDock }
+                    .navigationDestination(for: Route.self) { route in
+                        switch route {
+                        case .meeting(let id): MeetingDetailView(meetingID: id)
+                        case .settings: SettingsView()
+                        }
+                    }
             }
-            .navigationTitle("Minutes")
-            .navigationDestination(for: UUID.self) { id in
-                MeetingDetailView(meetingID: id)
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Settings", systemImage: "gearshape") { showingSettings = true }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Import audio", systemImage: "square.and.arrow.down") { showingImporter = true }
-                }
-            }
-            .safeAreaInset(edge: .bottom) { recordButton }
+            PadHost(pad: pad)
         }
+        .environment(pad)
+        .tint(.ballpoint)
         .fullScreenCover(isPresented: $showingRecorder) {
             RecordingView { id in
                 showingRecorder = false
-                if let id { path = [id] }
+                if let id { path = [.meeting(id)] }
             }
         }
-        .sheet(isPresented: $showingSettings) { SettingsView() }
         .fileImporter(isPresented: $showingImporter, allowedContentTypes: [.audio, .movie, .mpeg4Movie]) { result in
             importAudio(result)
         }
-        .confirmationDialog("Delete this meeting?", isPresented: .init(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), presenting: pendingDelete) { meeting in
-            Button("Delete Recording and Transcript", role: .destructive) { store.delete(meeting.id) }
-        } message: { meeting in
-            Text("“\(meeting.title)” will be removed from this iPhone. Anything you've already exported stays where you saved it.")
-        }
-        .alert("Something went wrong", isPresented: .init(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(errorMessage ?? "")
-        }
     }
 
-    private var list: some View {
-        List {
-            ForEach(store.meetings) { meeting in
-                NavigationLink(value: meeting.id) {
-                    VStack(alignment: .leading, spacing: 4) {
+    // MARK: - The pad
+
+    private var page: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+            Text("Minutes")
+                .font(Typeface.page(.largeTitle, .bold))
+                .foregroundStyle(Color.ink)
+                .padding(.leading, metrics.ruleX + PageMetrics.gutter / 2)
+                .padding(.top, 4)
+                .padding(.bottom, store.meetings.isEmpty ? 0 : 6)
+                .accessibilityAddTraits(.isHeader)
+
+            if store.meetings.isEmpty {
+                emptyPage
+            }
+
+            ForEach(days, id: \.heading) { day in
+                MarginRow(metrics: metrics) {
+                    Text(day.heading)
+                        .font(Typeface.page(.subheadline, .semibold).italic())
+                        .foregroundStyle(Color.pencil)
+                        .accessibilityAddTraits(.isHeader)
+                }
+                .padding(.top, 18)
+                .padding(.bottom, 2)
+
+                ForEach(day.meetings) { meeting in
+                    entry(meeting)
+                }
+            }
+            }
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func entry(_ meeting: Meeting) -> some View {
+        Button {
+            path.append(.meeting(meeting.id))
+        } label: {
+            VStack(spacing: 0) {
+                MarginRow(metrics: metrics) {
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text(meeting.createdAt.formatted(date: .omitted, time: .shortened))
+                            .font(Typeface.note(.footnote, .medium).monospacedDigit())
+                            .foregroundStyle(Color.ink)
+                        if meeting.duration > 0 {
+                            Text(meeting.shortLength)
+                                .font(Typeface.note(.caption).monospacedDigit())
+                                .foregroundStyle(Color.pencil)
+                        }
+                    }
+                } page: {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(meeting.title)
-                            .font(.headline)
+                            .font(Typeface.page(.title3, .semibold))
+                            .foregroundStyle(Color.ink)
                             .lineLimit(2)
-                        Text(meeting.subtitle)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        StatusLabel(meeting: meeting, stage: processing.stage(for: meeting.id))
-                            .font(.footnote)
+                            .multilineTextAlignment(.leading)
+                        if meeting.status == .ready, let excerpt = meeting.excerpt {
+                            Text(excerpt)
+                                .font(Typeface.page(.subheadline))
+                                .foregroundStyle(Color.pencil)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                        }
+                        StatusNote(meeting: meeting, stage: processing.stage(for: meeting.id), compact: true)
+                        if !meeting.speakers.isEmpty {
+                            HStack(spacing: 5) {
+                                ForEach(meeting.speakers.prefix(8), id: \.self) { InkStroke(color: Ink.color(for: $0), length: 14) }
+                            }
+                            .padding(.top, 2)
+                            .accessibilityElement()
+                            .accessibilityLabel(meeting.peopleText ?? "")
+                        }
                     }
-                    .padding(.vertical, 4)
                 }
-                .disabled(meeting.status == .recording)
-                .swipeActions {
-                    if meeting.status != .recording {
-                        Button("Delete", systemImage: "trash", role: .destructive) { pendingDelete = meeting }
-                    }
+                .padding(.vertical, 14)
+                RuledLine()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(meeting.status == .recording)
+    }
+
+    private var emptyPage: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            MarginRow(metrics: metrics) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Nothing on the pad yet.")
+                        .font(Typeface.page(.title2))
+                        .foregroundStyle(Color.ink)
+                    Text("Press record when the meeting starts. When you stop, you get the transcript, who said what, and a summary, all made on this iPhone.")
+                        .font(Typeface.page(.body))
+                        .foregroundStyle(Color.pencil)
+                        .lineSpacing(3)
                 }
+            }
+            .padding(.top, 28)
+            // A few blank ruled lines, as on a fresh page.
+            ForEach(0..<6, id: \.self) { _ in
+                RuledLine().padding(.top, 34)
             }
         }
     }
 
-    private var recordButton: some View {
-        Button {
-            showingRecorder = true
-        } label: {
-            Label("Record", systemImage: "mic.fill")
-                .font(.title3.weight(.semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
+    // MARK: - Record
+
+    private var recordDock: some View {
+        VStack(spacing: 8) {
+            Button {
+                showingRecorder = true
+            } label: {
+                RecordKey(recording: false)
+            }
+            .buttonStyle(PressableStyle())
+            .disabled(recorder.isActive)
+            .accessibilityLabel("Record")
+            .sensoryFeedback(.impact(weight: .medium), trigger: showingRecorder)
+            Text("Record")
+                .font(Typeface.note(.footnote, .medium))
+                .foregroundStyle(Color.pencil)
+                .accessibilityHidden(true)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(.red)
-        .controlSize(.large)
-        .padding(.horizontal)
-        .padding(.bottom, 8)
-        .disabled(recorder.isActive)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 14)
+        .padding(.bottom, 6)
+        .background {
+            LinearGradient(colors: [Color.paper.opacity(0), Color.paper, Color.paper], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+        }
+    }
+
+    // MARK: - Helpers
+
+    private var days: [(heading: String, meetings: [Meeting])] {
+        var result: [(heading: String, meetings: [Meeting])] = []
+        for meeting in store.meetings {
+            let heading = dayHeading(for: meeting.createdAt)
+            if result.last?.heading == heading {
+                result[result.count - 1].meetings.append(meeting)
+            } else {
+                result.append((heading, [meeting]))
+            }
+        }
+        return result
     }
 
     private func importAudio(_ result: Result<URL, Error>) {
         do {
             let meeting = try store.importAudio(from: result.get())
             processing.enqueue(meeting.id, .full(liveWords: nil))
-            path = [meeting.id]
+            path = [.meeting(meeting.id)]
         } catch {
-            errorMessage = "Couldn't import that file: \(error.localizedDescription)"
+            pad.show { NoticeCard(title: "Couldn't import that file", message: error.localizedDescription) }
         }
     }
 }

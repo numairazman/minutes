@@ -1,0 +1,48 @@
+# docker compose up -d --build
+#
+# COMPOSE_PROFILES in .env picks the build: `gpu` (NVIDIA, through Docker Desktop's WSL 2
+# backend) or `cpu`. Only one of the two runs at a time; both answer on port 8765.
+
+x-server: &server
+  build: .
+  container_name: minutes-server
+  restart: unless-stopped
+  ports:
+    - "8765:8765"
+  environment:
+    MINUTES_TOKEN: ${MINUTES_TOKEN:?set MINUTES_TOKEN in .env}
+    HF_TOKEN: ${HF_TOKEN:-}
+    WHISPER_MODEL: ${WHISPER_MODEL:-large-v3}
+    COMPUTE_TYPE: ${COMPUTE_TYPE:-}
+    BATCH_SIZE: ${BATCH_SIZE:-}
+    CPU_THREADS: ${CPU_THREADS:-}
+    KEEP_LOADED_MINUTES: ${KEEP_LOADED_MINUTES:-2}
+    PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+  volumes:
+    # Whisper, the aligner and pyannote (~4 GB) download once and survive rebuilds.
+    - models:/models
+
+services:
+  gpu:
+    <<: *server
+    image: minutes-server:gpu
+    profiles: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  cpu:
+    <<: *server
+    image: minutes-server:cpu
+    profiles: [cpu]
+    build:
+      context: .
+      args:
+        TORCH_INDEX: https://download.pytorch.org/whl/cpu
+
+volumes:
+  models:

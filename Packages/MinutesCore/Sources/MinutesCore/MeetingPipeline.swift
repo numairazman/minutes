@@ -17,6 +17,8 @@ public enum PipelineStage: Equatable, Sendable {
     case transcribing(Double)
     case identifyingSpeakers(Double)
     case summarizing(String)
+    /// Re-processing on the PC: a label ("Transcribing on PC…") and how far that step is.
+    case remote(String, Double)
 
     public var label: String {
         switch self {
@@ -26,7 +28,14 @@ public enum PipelineStage: Equatable, Sendable {
             return fraction > 0 ? "Identifying speakers… \(Int(fraction * 100))%" : "Identifying speakers…"
         case .summarizing(let detail):
             return detail
+        case .remote(let detail, let fraction):
+            return fraction > 0 ? "\(detail) \(Int(fraction * 100))%" : detail
         }
+    }
+
+    public var isRemote: Bool {
+        if case .remote = self { return true }
+        return false
     }
 }
 
@@ -62,6 +71,7 @@ public enum MeetingPipeline {
                 return meeting
             }
         }
+        meeting.transcriptEngine = nil
 
         if Task.isCancelled { return meeting }
         stage(.identifyingSpeakers(0))
@@ -101,6 +111,49 @@ public enum MeetingPipeline {
         // Names given to speakers that no longer exist after a re-run would silently attach to
         // whoever now has that number; drop them unless the set of speakers is unchanged.
         if Set(meeting.speakers) != previous { meeting.speakerNames = [:] }
+        return meeting
+    }
+
+    /// The opt-in "maximum accuracy" tier: the PC's WhisperX server transcribes and identifies
+    /// speakers again, then words are matched to speakers and summarized here, exactly as after
+    /// on-device processing. If the PC fails, the meeting keeps the transcript it had.
+    public static func reprocessOnServer(
+        _ meeting: Meeting,
+        audioURL: URL,
+        server: AccuracyServer,
+        settings: PipelineSettings,
+        stage: @escaping @Sendable (PipelineStage) -> Void
+    ) async -> Meeting {
+        var meeting = meeting
+        meeting.serverError = nil
+        let transcript: AccuracyServer.Transcript
+        do {
+            transcript = try await server.transcribe(
+                audioURL: audioURL,
+                language: Locale(identifier: meeting.localeIdentifier).language.languageCode?.identifier,
+                speakers: meeting.expectedSpeakers,
+                vocabulary: settings.vocabulary,
+                progress: { stage(.remote($0, $1)) }
+            )
+        } catch is CancellationError {
+            return meeting
+        } catch {
+            meeting.serverError = error.localizedDescription
+            return meeting
+        }
+        let previous = Set(meeting.speakers)
+        meeting.words = transcript.words
+        meeting.speakerTurns = transcript.turns
+        meeting.utterances = SpeakerAligner.utterances(words: meeting.words, turns: meeting.speakerTurns)
+        meeting.transcriptEngine = transcript.engine ?? "PC"
+        meeting.processingError = nil
+        meeting.speakerError = nil
+        meeting.status = .ready
+        // Same rule as identifySpeakers: names only survive if the set of speakers is unchanged.
+        if Set(meeting.speakers) != previous { meeting.speakerNames = [:] }
+        if settings.summarize, !Task.isCancelled {
+            meeting = await summarize(meeting, stage: stage)
+        }
         return meeting
     }
 
